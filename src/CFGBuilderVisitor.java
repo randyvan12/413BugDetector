@@ -26,9 +26,9 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
                 Variable varInfo = variables.get(varName);
 
                 if (varInfo.isPointer) {
-                    if (code.contains(varName + " = NULL")) {
+                    if (code.matches(varName + "\\s*=\\s*NULL")) {
                         varInfo.state = Variable.PointerState.NULL;
-                    } else if (code.matches(varName + " = .*") && !code.contains(varName + " = NULL")) {
+                    } else if (code.matches(varName + "\\s*=\\s*.*") && !code.matches(varName + "\\s*=\\s*NULL")) {
                         varInfo.state = Variable.PointerState.ASSIGNED;
                     }
                 }
@@ -47,7 +47,8 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
                 if (variables.containsKey(varName)) {
                     Variable varInfo = variables.get(varName);
 
-                    if (varInfo.isPointer && varInfo.state == Variable.PointerState.NULL) {
+                    if (varInfo.isPointer && varInfo.state == Variable.PointerState.NULL &&
+                            !code.matches("\\s*int\\s*\\*\\s*" + varName + "\\s*=.*") && !code.contains(varName + " = NULL")) {
                         System.out.println("Potential null pointer dereference detected at: " + code);
                     }
                 }
