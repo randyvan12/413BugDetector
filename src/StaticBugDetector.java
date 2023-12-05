@@ -12,9 +12,7 @@ public class StaticBugDetector {
         CLexer lexer = new CLexer(codeCharStream);
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         CParser parser = new CParser(tokens);
-        ParseTree tree = parser.compilationUnit(); // 'prog' is the starting rule
-
-        // Print the parse tree (for demonstration)
+        ParseTree tree = parser.compilationUnit();
         System.out.println(tree.toStringTree(parser));
 
         // Step 2 Parse ParseTree and create a CFG of it.
@@ -26,13 +24,5 @@ public class StaticBugDetector {
         // Step 3 Extract and keep track of all the variables like the pointers.
         System.out.println("\n");
         visitor.printVariableNames();
-
-        /*
-        Node: int *ptr = NULL; - Variable: ptr
-        Node: int value; - Variable: value
-        Node: value = *ptr; - Variable: value
-        Node: printf("Value: %d\n", value); - Variable: value
-        Node: return 0; - No variable
-         */
     }
 }
