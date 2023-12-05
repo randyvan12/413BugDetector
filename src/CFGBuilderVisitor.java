@@ -17,14 +17,17 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
         return cfg;
     }
 
+    // Analyzes the CFG to update the state of variables, especially pointers
     public void analyzeCFG(ControlFlowGraph cfg) {
         for (CFGNode node : cfg.getAllNodes()) {
             String code = node.getCode();
             String varName = extractVariableName(node.getContext());
 
+            // Update the state of the variable if it is a pointer
             if (varName != null && variables.containsKey(varName)) {
                 Variable varInfo = variables.get(varName);
 
+                // Update the state based on the assignment in the code
                 if (varInfo.isPointer) {
                     if (code.matches(varName + "\\s*=\\s*NULL")) {
                         varInfo.state = Variable.PointerState.NULL;
@@ -36,6 +39,7 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
         }
     }
 
+    // Checks the CFG for potential null pointer dereferences
     public void checkForNullDereferences(ControlFlowGraph cfg) {
         boolean found = false;
         for (CFGNode node : cfg.getAllNodes()) {
@@ -43,11 +47,13 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
             Pattern p = Pattern.compile("\\*\\s*(\\w+)");
             Matcher m = p.matcher(code);
 
+            // Check each dereference to see if the pointer might be null based on analyzeCFG method
             while (m.find()) {
                 String varName = m.group(1);
                 if (variables.containsKey(varName)) {
                     Variable varInfo = variables.get(varName);
 
+                    // Warn if a null pointer is dereferenced
                     if (varInfo.isPointer && varInfo.state == Variable.PointerState.NULL &&
                             !code.matches("\\s*int\\s*\\*\\s*" + varName + "\\s*=.*") && !code.contains(varName + " = NULL")) {
                         System.out.println("Potential null pointer dereference detected at: " + code);
@@ -61,6 +67,7 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
         }
     }
 
+    // Prints the names and states of variables in each node of the CFG
     public void printVariableNames() {
         for (CFGNode node : cfg.getAllNodes()) {
             String code = node.getCode();
@@ -74,6 +81,7 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
             }
         }
     }
+
     // Handles declaration statements
     @Override
     public Void visitDeclaration(CParser.DeclarationContext ctx) {
@@ -159,7 +167,6 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
             CParser.ExpressionStatementContext exprStmtCtx = (CParser.ExpressionStatementContext) ctx;
             String code = exprStmtCtx.getText();
             if (code.contains("=")) {
-                // Extract the variable name before the "=" character
                 return code.substring(0, code.indexOf("=")).trim();
             }
             List<CParser.AssignmentExpressionContext> assignExprList = exprStmtCtx.expression().assignmentExpression();
