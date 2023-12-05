@@ -85,11 +85,16 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
     // Handles declaration statements
     @Override
     public Void visitDeclaration(CParser.DeclarationContext ctx) {
+        // Extract the variable name from the declaration context
         String varName = extractVariableName(ctx);
+        // If the declared variable is a pointer
         boolean isPointer = ctx.getText().contains("*");
+        // Set the initial state of the pointer (NULL or ASSIGNED)
         Variable.PointerState state = ctx.getText().contains("NULL") ? Variable.PointerState.NULL : Variable.PointerState.ASSIGNED;
+        // Add variable information in the variables map
         variables.put(varName, new Variable(varName, isPointer, state));
 
+        // Add this declaration statement as a node in the CFG
         addNodeToCFG(ctx.getText(), ctx);
         return super.visitDeclaration(ctx);
     }
@@ -97,17 +102,21 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
     // Handles expressions statements like assignments to variables.
     @Override
     public Void visitExpressionStatement(CParser.ExpressionStatementContext ctx) {
+        // Retrieve the full code of the expression statement
         String code = ctx.getText();
+        // Get the variable name involved in the expression
         String varName = extractVariableName(ctx);
 
+        // If a variable is found in the expression
         if (varName != null) {
-            // Check if the variable is already tracked; if not, initialize its info
+            // Check if the variable is already in the map. if not, initialize its info
             if (!variables.containsKey(varName)) {
                 variables.put(varName, new Variable(varName, false, Variable.PointerState.ASSIGNED)); // Assuming it's not a pointer
             }
 
+            // Retrieve variable info from the map
             Variable varInfo = variables.get(varName);
-            // Update pointer state if it's an assignment to a pointer
+            // If the variable is a pointer, update its state based on the assignment
             if (varInfo.isPointer) {
                 if (code.matches(varName + "\\s*=\\s*NULL")) {
                     varInfo.state = Variable.PointerState.NULL;
@@ -117,6 +126,7 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
             }
         }
 
+        // Add this expression statement as a node in the CFG
         addNodeToCFG(code, ctx);
         return super.visitExpressionStatement(ctx);
     }
@@ -124,16 +134,22 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
     // Handles things like return
     @Override
     public Void visitJumpStatement(CParser.JumpStatementContext ctx) {
+        // Retrieve the full code of the jump statement
         String jumpStatement = ctx.getText();
 
+        // Check if the jump statement includes an expression (like a return value)
         if (ctx.getChildCount() > 1 && ctx.getChild(1) instanceof CParser.ExpressionContext) {
+            // Extract the variable name involved in the expression
             String varName = extractVariableName((CParser.ExpressionContext) ctx.getChild(1));
+            // Retrieve variable info from the map
             Variable varInfo = variables.get(varName);
+            // If the variable is a pointer and its state is NULL
             if (varInfo != null && varInfo.isPointer && varInfo.state == Variable.PointerState.NULL) {
                 System.out.println("Warning: Returning a null pointer in " + jumpStatement);
             }
         }
 
+        // Add this jump statement as a node in the CFG
         addNodeToCFG(ctx.getText(), ctx);
         return super.visitJumpStatement(ctx);
     }
@@ -157,7 +173,9 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
         // declaration
         if (ctx instanceof CParser.DeclarationContext) {
             CParser.DeclarationContext declCtx = (CParser.DeclarationContext) ctx;
+            // Check if the declaration has an initializer list and is not empty
             if (declCtx.initDeclaratorList() != null && !declCtx.initDeclaratorList().initDeclarator().isEmpty()) {
+                // Return the name of the first variable declared
                 return declCtx.initDeclaratorList().initDeclarator(0).declarator().directDeclarator().getText();
             }
         }
@@ -166,15 +184,20 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
         if (ctx instanceof CParser.ExpressionStatementContext) {
             CParser.ExpressionStatementContext exprStmtCtx = (CParser.ExpressionStatementContext) ctx;
             String code = exprStmtCtx.getText();
+            // If the expression contains an assignment operator
             if (code.contains("=")) {
+                // Return the variable name on the left side of the "="
                 return code.substring(0, code.indexOf("=")).trim();
             }
+            // Handle cases where the assignment expression is more complex
             List<CParser.AssignmentExpressionContext> assignExprList = exprStmtCtx.expression().assignmentExpression();
             if (!assignExprList.isEmpty()) {
                 CParser.AssignmentExpressionContext assignCtx = assignExprList.get(0);
+                // Extract the variable name from the unary expression
                 if (assignCtx.unaryExpression() != null) {
                     CParser.PostfixExpressionContext postfixCtx = assignCtx.unaryExpression().postfixExpression();
                     if (postfixCtx != null) {
+                        // Return the primary expression text, which should be the variable name
                         return postfixCtx.primaryExpression().getText();
                     }
                 }
@@ -191,6 +214,7 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
                     if (assignCtx.unaryExpression() != null) {
                         CParser.PostfixExpressionContext postfixCtx = assignCtx.unaryExpression().postfixExpression();
                         if (postfixCtx != null) {
+                            // Return the variable name involved in the return statement
                             return postfixCtx.primaryExpression().getText();
                         }
                     }
