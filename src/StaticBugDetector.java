@@ -24,5 +24,9 @@ public class StaticBugDetector {
         // Step 3 Extract and keep track of all the variables like the pointers.
         System.out.println("\n");
         visitor.printVariableNames();
+
+        // Step 4 run dataflow analysis and show results.
+        visitor.analyzeCFG(cfg);
+        visitor.checkForNullDereferences(cfg);
     }
 }

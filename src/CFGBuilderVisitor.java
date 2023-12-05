@@ -6,6 +6,8 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class CFGBuilderVisitor extends CBaseVisitor<Void> {
     private ControlFlowGraph cfg = new ControlFlowGraph();
@@ -13,6 +15,44 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
     private Map<String, Variable> variables = new HashMap<>();
     public ControlFlowGraph getCFG() {
         return cfg;
+    }
+
+    public void analyzeCFG(ControlFlowGraph cfg) {
+        for (CFGNode node : cfg.getAllNodes()) {
+            String code = node.getCode();
+            String varName = extractVariableName(node.getContext());
+
+            if (varName != null && variables.containsKey(varName)) {
+                Variable varInfo = variables.get(varName);
+
+                if (varInfo.isPointer) {
+                    if (code.contains(varName + " = NULL")) {
+                        varInfo.state = Variable.PointerState.NULL;
+                    } else if (code.matches(varName + " = .*") && !code.contains(varName + " = NULL")) {
+                        varInfo.state = Variable.PointerState.ASSIGNED;
+                    }
+                }
+            }
+        }
+    }
+
+    public void checkForNullDereferences(ControlFlowGraph cfg) {
+        for (CFGNode node : cfg.getAllNodes()) {
+            String code = node.getCode();
+            Pattern p = Pattern.compile("\\*\\s*(\\w+)");
+            Matcher m = p.matcher(code);
+
+            while (m.find()) {
+                String varName = m.group(1);
+                if (variables.containsKey(varName)) {
+                    Variable varInfo = variables.get(varName);
+
+                    if (varInfo.isPointer && varInfo.state == Variable.PointerState.NULL) {
+                        System.out.println("Potential null pointer dereference detected at: " + code);
+                    }
+                }
+            }
+        }
     }
 
     public void printVariableNames() {
@@ -30,11 +70,9 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
     public Void visitDeclaration(CParser.DeclarationContext ctx) {
         String varName = extractVariableName(ctx);
         boolean isPointer = ctx.getText().contains("*");
-        variables.put(varName, new Variable(varName, isPointer, false));
+        Variable.PointerState state = ctx.getText().contains("NULL") ? Variable.PointerState.NULL : Variable.PointerState.ASSIGNED;
+        variables.put(varName, new Variable(varName, isPointer, state));
 
-        if (ctx.getText().contains("NULL")) {
-            variables.get(varName).isNull = true;
-        }
         addNodeToCFG(ctx.getText(), ctx);
         return super.visitDeclaration(ctx);
     }
@@ -45,8 +83,9 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
         String varName = extractVariableName(ctx);
         Variable varInfo = variables.get(varName);
         if (varInfo != null && varInfo.isPointer) {
-            varInfo.isNull = ctx.getText().contains("NULL");
+            varInfo.state = ctx.getText().contains("NULL") ? Variable.PointerState.NULL : Variable.PointerState.ASSIGNED;
         }
+
         addNodeToCFG(ctx.getText(), ctx);
         return super.visitExpressionStatement(ctx);
     }
@@ -59,12 +98,11 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
         if (ctx.getChildCount() > 1 && ctx.getChild(1) instanceof CParser.ExpressionContext) {
             String varName = extractVariableName((CParser.ExpressionContext) ctx.getChild(1));
             Variable varInfo = variables.get(varName);
-            if (varInfo != null && varInfo.isPointer) {
-                if (varInfo.isNull) {
-                    System.out.println("Warning: Returning a null pointer in " + jumpStatement);
-                }
+            if (varInfo != null && varInfo.isPointer && varInfo.state == Variable.PointerState.NULL) {
+                System.out.println("Warning: Returning a null pointer in " + jumpStatement);
             }
         }
+
         addNodeToCFG(ctx.getText(), ctx);
         return super.visitJumpStatement(ctx);
     }
