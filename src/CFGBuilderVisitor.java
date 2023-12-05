@@ -37,6 +37,7 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
     }
 
     public void checkForNullDereferences(ControlFlowGraph cfg) {
+        boolean found = false;
         for (CFGNode node : cfg.getAllNodes()) {
             String code = node.getCode();
             Pattern p = Pattern.compile("\\*\\s*(\\w+)");
@@ -50,19 +51,26 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
                     if (varInfo.isPointer && varInfo.state == Variable.PointerState.NULL &&
                             !code.matches("\\s*int\\s*\\*\\s*" + varName + "\\s*=.*") && !code.contains(varName + " = NULL")) {
                         System.out.println("Potential null pointer dereference detected at: " + code);
+                        found = true;
                     }
                 }
             }
+        }
+        if (!found){
+            System.out.println("No potential null pointer deferences found");
         }
     }
 
     public void printVariableNames() {
         for (CFGNode node : cfg.getAllNodes()) {
+            String code = node.getCode();
             String variableName = extractVariableName(node.getContext());
-            if (variableName != null) {
-                System.out.println("Node: " + node.getCode() + " - Variable: " + variableName);
+            if (variableName != null && variables.containsKey(variableName)) {
+                Variable varInfo = variables.get(variableName);
+                String pointerState = varInfo.isPointer ? varInfo.state.toString() : "Not a pointer";
+                System.out.println("Node: " + code + " - Variable: " + variableName + " - State: " + pointerState);
             } else {
-                System.out.println("Node: " + node.getCode() + " - No variable");
+                System.out.println("Node: " + code + " - No variable");
             }
         }
     }
@@ -81,13 +89,27 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
     // Handles expressions statements like assignments to variables.
     @Override
     public Void visitExpressionStatement(CParser.ExpressionStatementContext ctx) {
+        String code = ctx.getText();
         String varName = extractVariableName(ctx);
-        Variable varInfo = variables.get(varName);
-        if (varInfo != null && varInfo.isPointer) {
-            varInfo.state = ctx.getText().contains("NULL") ? Variable.PointerState.NULL : Variable.PointerState.ASSIGNED;
+
+        if (varName != null) {
+            // Check if the variable is already tracked; if not, initialize its info
+            if (!variables.containsKey(varName)) {
+                variables.put(varName, new Variable(varName, false, Variable.PointerState.ASSIGNED)); // Assuming it's not a pointer
+            }
+
+            Variable varInfo = variables.get(varName);
+            // Update pointer state if it's an assignment to a pointer
+            if (varInfo.isPointer) {
+                if (code.matches(varName + "\\s*=\\s*NULL")) {
+                    varInfo.state = Variable.PointerState.NULL;
+                } else if (code.matches(varName + "\\s*=\\s*.*")) {
+                    varInfo.state = Variable.PointerState.ASSIGNED;
+                }
+            }
         }
 
-        addNodeToCFG(ctx.getText(), ctx);
+        addNodeToCFG(code, ctx);
         return super.visitExpressionStatement(ctx);
     }
 
@@ -135,6 +157,11 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
         // expression (like in an assignment)
         if (ctx instanceof CParser.ExpressionStatementContext) {
             CParser.ExpressionStatementContext exprStmtCtx = (CParser.ExpressionStatementContext) ctx;
+            String code = exprStmtCtx.getText();
+            if (code.contains("=")) {
+                // Extract the variable name before the "=" character
+                return code.substring(0, code.indexOf("=")).trim();
+            }
             List<CParser.AssignmentExpressionContext> assignExprList = exprStmtCtx.expression().assignmentExpression();
             if (!assignExprList.isEmpty()) {
                 CParser.AssignmentExpressionContext assignCtx = assignExprList.get(0);
