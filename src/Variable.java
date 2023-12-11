@@ -8,6 +8,6 @@ class Variable {
         this.state = state;
     }
     enum PointerState {
-        ASSIGNED, NULL, POTENTIALLY_NULL
+        ASSIGNED, NULL, POTENTIALLY_NULL, UNDEFINED
     }
 }

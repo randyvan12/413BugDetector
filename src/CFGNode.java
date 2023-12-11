@@ -14,9 +14,12 @@ public class CFGNode {
         this.successors = new ArrayList<>();
     }
 
-    // Add a successor node
     void addSuccessor(CFGNode node) {
         successors.add(node);
+    }
+
+    public List<CFGNode> getSuccessors(){
+        return successors;
     }
 
     public ParserRuleContext getContext() {

@@ -3,9 +3,7 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.antlr.v4.runtime.ParserRuleContext;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -16,25 +14,54 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
     public ControlFlowGraph getCFG() {
         return cfg;
     }
+    private Stack<CFGNode> branchStack = new Stack<>();
 
     // Analyzes the CFG to update the state of variables, especially pointers
     public void analyzeCFG(ControlFlowGraph cfg) {
+        Map<String, Variable> mainState = new HashMap<>(); // Main flow state
+        Map<String, Variable> ifState = new HashMap<>(); // State at the start of 'if'
+        boolean inElseBranch = false;
+        CFGNode elseNode = null; // Node representing the 'else' statement
+
         for (CFGNode node : cfg.getAllNodes()) {
             String code = node.getCode();
             String varName = extractVariableName(node.getContext());
 
-            // Update the state of the variable if it is a pointer
-            if (varName != null && variables.containsKey(varName)) {
-                Variable varInfo = variables.get(varName);
+            // Save state at the start of 'if' branch
+            if (code.startsWith("if(")) {
+                ifState = new HashMap<>(mainState);
+            } else if (code.equals("else")) {
+                inElseBranch = true;
+                elseNode = node;
+                mainState = new HashMap<>(ifState); // Use 'if' state for 'else' branch
+            }
 
-                // Update the state based on the assignment in the code
-                if (varInfo.isPointer) {
-                    if (code.matches(varName + "\\s*=\\s*NULL")) {
-                        varInfo.state = Variable.PointerState.NULL;
-                    } else if (code.matches(varName + "\\s*=\\s*.*") && !code.matches(varName + "\\s*=\\s*NULL")) {
-                        varInfo.state = Variable.PointerState.ASSIGNED;
+            // Update state based on code
+            if (varName != null) {
+                boolean isPointer = code.contains("*");
+                Variable.PointerState state = code.contains("NULL") ? Variable.PointerState.NULL : Variable.PointerState.ASSIGNED;
+                mainState.put(varName, new Variable(varName, isPointer, state));
+            }
+
+            // Check if we are exiting the 'if-else' structure
+            if (inElseBranch && (elseNode == null || !elseNode.getSuccessors().contains(node))) {
+                inElseBranch = false;
+                elseNode = null;
+                // Merge states from 'if' and 'else' branches
+                for (String key : ifState.keySet()) {
+                    Variable ifVarState = ifState.get(key);
+                    Variable elseVarState = mainState.getOrDefault(key, new Variable(key, false, Variable.PointerState.UNDEFINED));
+
+                    if (ifVarState.state != elseVarState.state) {
+                        elseVarState.state = Variable.PointerState.POTENTIALLY_NULL;
                     }
+                    mainState.put(key, elseVarState);
                 }
+            }
+
+            // Update global state if not in 'else' branch
+            if (!inElseBranch) {
+                variables.putAll(mainState);
             }
         }
     }
@@ -154,6 +181,28 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
         return super.visitJumpStatement(ctx);
     }
 
+    // Handles selection statements like 'if-else'
+    @Override
+    public Void visitSelectionStatement(CParser.SelectionStatementContext ctx) {
+        if (ctx.If() != null) {
+            String ifCondition = ctx.expression().getText();
+            addNodeToCFG("if(" + ifCondition + ")", ctx);
+
+            // Save the current state of variables before visiting 'if' block
+            Map<String, Variable> preIfState = new HashMap<>(variables);
+
+            visit(ctx.statement(0)); // Visit 'if' block
+
+            if (ctx.Else() != null) {
+                // Restore variables to state before 'if' block
+                variables = new HashMap<>(preIfState);
+
+                addNodeToCFG("else", ctx);
+                visit(ctx.statement(1)); // Visit 'else' block
+            }
+        }
+        return null; // Return null to avoid visiting children automatically
+    }
 
     private void addNodeToCFG(String code, ParserRuleContext ctx) {
         CFGNode currentNode = new CFGNode(code, ctx);
@@ -163,7 +212,23 @@ public class CFGBuilderVisitor extends CBaseVisitor<Void> {
         }
 
         if (lastNode != null && !lastNode.equals(currentNode)) {
-            lastNode.addSuccessor(currentNode);
+            if (!lastNode.getCode().startsWith("if(") && !lastNode.getCode().equals("else")) {
+                lastNode.addSuccessor(currentNode);
+            }
+
+            if (lastNode.getCode().startsWith("if(")) {
+                // Link 'if' node to the current node (start of the 'if' block)
+                lastNode.addSuccessor(currentNode);
+                // Push the 'if' node onto the branch stack
+                branchStack.push(currentNode);
+            } else if (lastNode.getCode().equals("else")) {
+                // Link 'else' node to the current node (start of the 'else' block)
+                lastNode.addSuccessor(currentNode);
+                if (!branchStack.isEmpty()) {
+                    // Pop the corresponding 'if' node from the stack
+                    CFGNode ifNode = branchStack.pop();
+                }
+            }
         }
 
         lastNode = currentNode;

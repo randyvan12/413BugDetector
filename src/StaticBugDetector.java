@@ -8,7 +8,7 @@ import java.io.IOException;
 public class StaticBugDetector {
     public static void main(String[] args) throws IOException {
         //Step 1 Parse C code and generate a ParseTree
-        CharStream codeCharStream = CharStreams.fromFileName("./src/example2.c");
+        CharStream codeCharStream = CharStreams.fromFileName("./src/example.c");
         CLexer lexer = new CLexer(codeCharStream);
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         CParser parser = new CParser(tokens);
@@ -32,5 +32,6 @@ public class StaticBugDetector {
         System.out.println("\nResult:");
         visitor.analyzeCFG(cfg);
         visitor.checkForNullDereferences(cfg);
+
     }
 }

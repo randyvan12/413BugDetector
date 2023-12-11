@@ -1,0 +1,28 @@
+Open the project in any IDE or editor.
+
+We used Intelij so these instrcutions will be related to that.
+
+It should be able to run as is.
+
+If there are import errors for ANTLR related imports.
+
+Download "Complete ANTLR 4.13.1 JAVA binaries jar" from the website
+https://www.antlr.org/download.html
+
+Go to File -> Project Structure -> Libraries -> Add the ANTLR binaries jar you just downloaded -> Apply and select Okay
+
+These should solve the imports and then you can run the project.
+
+You can run the project through StaticBugDectector and inputs are example.c, example1.c and etc in the src folder.
+Change this line to run a new example in StaticBugDectector:
+CharStream codeCharStream = CharStreams.fromFileName("./src/example.c");
+
+Null Pointer Errors:
+example.c
+example3.c
+
+No Errors:
+example2.c
+example4.c
+
+
